@@ -16,17 +16,19 @@ import argparse
 import socket
 import threading
 
-import crypto_utils as cu
-import protocol as proto
+import crypto_utils as cu # helpful functions for encryption and decryprion algorithms.
+import protocol as proto  # wire protocol for the message over the internet.
 
 
 def handle_client(conn: socket.socket, addr: tuple, server_private_key, server_public_key_pem: bytes) -> None:
     peer = f"{addr[0]}:{addr[1]}"
     print(f"[+] New connection from {peer}")
+    
+    # once the client has been connected over the socket the process begins.
 
     try:
         # ------------------------------------------------------------------ #
-        # Handshake                                                            #
+        # Handshake                                                          #
         # ------------------------------------------------------------------ #
 
         # Step 1 – send our public key
@@ -93,26 +95,26 @@ def handle_client(conn: socket.socket, addr: tuple, server_private_key, server_p
 
 def run_server(host: str, port: int) -> None:
     print("Generating RSA-2048 key pair for server…")
-    server_private_key, server_public_key = cu.generate_rsa_keypair()
-    server_public_key_pem = cu.serialize_public_key(server_public_key)
+    server_private_key, server_public_key = cu.generate_rsa_keypair() # generating the public and private key of server
+    server_public_key_pem = cu.serialize_public_key(server_public_key) # serialize the public key
     print("Key pair ready.\n")
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:
-        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind((host, port))
-        srv.listen(5)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv: # create the socket so client can listen to the server
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) 
+        srv.bind((host, port)) # set the port and host for the socket
+        srv.listen(5) 
         print(f"Server listening on {host}:{port}")
         print("Press Ctrl-C to stop.\n")
 
         try:
             while True:
                 conn, addr = srv.accept()
-                t = threading.Thread(
-                    target=handle_client,
-                    args=(conn, addr, server_private_key, server_public_key_pem),
-                    daemon=True,
+                t = threading.Thread(       # threading for handling multiple clients simoultancly.
+                    target=handle_client,   # handle_client() for establishing the key (over a secure channel) and receiving messages. 
+                    args=(conn, addr, server_private_key, server_public_key_pem), # args of handle_client()
+                    daemon=True, # spawn child
                 )
-                t.start()
+                t.start() # start thread
         except KeyboardInterrupt:
             print("\nServer shutting down.")
 
