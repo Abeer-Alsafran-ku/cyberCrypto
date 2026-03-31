@@ -29,9 +29,9 @@ def receive_loop(
     """Background thread: print incoming messages from the server."""
     while not stop_event.is_set():
         try:
-            msg = proto.receive(sock)
+            msg = proto.receive(sock) # acknowledge 
         except ConnectionError:
-            if not stop_event.is_set():
+            if not stop_event.is_set(): 
                 print("\n[!] Server closed the connection.")
             stop_event.set()
             break
@@ -41,12 +41,12 @@ def receive_loop(
             stop_event.set()
             break
 
-        if msg["type"] == proto.T_ERROR:
+        if msg["type"] == proto.T_ERROR: # handling error from server
             print(f"\n[Server error] {msg.get('reason', '?')}")
             stop_event.set()
             break
 
-        if msg["type"] != proto.T_MSG:
+        if msg["type"] != proto.T_MSG: # no error
             continue
 
         # Decrypt
@@ -54,7 +54,7 @@ def receive_loop(
 
         # Verify signature
         valid = cu.verify(server_public_key, msg["ciphertext"], msg["signature"])
-        sig_status = "valid" if valid else "INVALID ⚠"
+        sig_status = "valid" if valid else "INVALID!"
 
         print(f"\n[Server | sig:{sig_status}] {plaintext.decode()}")
         print("You: ", end="", flush=True)
@@ -62,13 +62,13 @@ def receive_loop(
 
 def run_client(host: str, port: int) -> None:
     print("Generating RSA-2048 key pair for client…")
-    client_private_key, client_public_key = cu.generate_rsa_keypair()
-    client_public_key_pem = cu.serialize_public_key(client_public_key)
+    client_private_key, client_public_key = cu.generate_rsa_keypair() # create keys
+    client_public_key_pem = cu.serialize_public_key(client_public_key) # serialize them
     print("Key pair ready.\n")
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         print(f"Connecting to {host}:{port}…")
-        sock.connect((host, port))
+        sock.connect((host, port)) # connect to the socket
         print("Connected.\n")
 
         # -------------------------------------------------------------- #
@@ -80,11 +80,11 @@ def run_client(host: str, port: int) -> None:
         if msg["type"] != proto.T_HELLO:
             print(f"[!] Expected HELLO from server, got {msg['type']}")
             return
-        server_public_key = cu.deserialize_public_key(msg["public_key"])
+        server_public_key = cu.deserialize_public_key(msg["public_key"]) # take server public key
         print("Received server public key.")
 
         # Step 2 – send our public key
-        proto.send_hello(sock, client_public_key_pem)
+        proto.send_hello(sock, client_public_key_pem) 
 
         # Step 3 – generate session key, encrypt with server's public key, send
         session_key = cu.generate_aes_key()
@@ -97,30 +97,30 @@ def run_client(host: str, port: int) -> None:
         # -------------------------------------------------------------- #
         # Start background receiver thread                                #
         # -------------------------------------------------------------- #
-        stop_event = threading.Event()
-        receiver = threading.Thread(
-            target=receive_loop,
-            args=(sock, session_key, server_public_key, stop_event),
-            daemon=True,
+        stop_event = threading.Event() # create thread
+        receiver = threading.Thread(  
+            target=receive_loop, # thread function - loop (key-msg-sig-verify)
+            args=(sock, session_key, server_public_key, stop_event), # loop args
+            daemon=True, 
         )
-        receiver.start()
+        receiver.start() # start deamon
 
         # -------------------------------------------------------------- #
-        # Interactive send loop                                           #
+        # Interactive send loop                                          #
         # -------------------------------------------------------------- #
         try:
             while not stop_event.is_set():
-                print("You: ", end="", flush=True)
+                print("You: ", end="", flush=True) # user input
                 line = input()
 
-                if stop_event.is_set():
+                if stop_event.is_set(): # check if server stops
                     break
 
-                if line.strip().lower() == "quit":
+                if line.strip().lower() == "quit": # client closed the connection
                     proto.send_error(sock, "Client disconnecting")
                     break
 
-                if not line.strip():
+                if not line.strip(): # no input
                     continue
 
                 # Encrypt
