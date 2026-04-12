@@ -78,7 +78,7 @@ def run_client(host: str, port: int) -> None:
         # Step 1 – receive server's public key
         msg = proto.receive(sock)
         if msg["type"] != proto.T_HELLO:
-            print(f"[!] Expected HELLO from server, got {msg['type']}")
+            print(f"[!] Expected SALAM from server, got {msg['type']}")
             return
         server_public_key = cu.deserialize_public_key(msg["public_key"]) # take server public key
         print("Received server public key.")

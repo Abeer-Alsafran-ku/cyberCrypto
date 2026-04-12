@@ -25,9 +25,9 @@ import base64
 import socket
 
 # Message type constants
-T_HELLO       = "HELLO"
-T_SESSION_KEY = "SESSION_KEY"
-T_MSG         = "MSG"
+T_HELLO       = "SALAM"
+T_SESSION_KEY = "SAFRAN"
+T_MSG         = "ABEER"
 T_ERROR       = "ERROR"
 
 _HEADER_FMT  = "!I"          # 4-byte big-endian unsigned int
