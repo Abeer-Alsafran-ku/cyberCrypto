@@ -1,23 +1,4 @@
-"""
-Wire protocol for the encrypted messaging application.
-
-Every message sent over the TCP socket has the following structure:
-
-    [ 4 bytes big-endian length ][ JSON payload (length bytes) ]
-
-The JSON payload always contains a "type" field.  All binary fields are
-base64-encoded so they survive JSON serialisation.
-
-Message types
--------------
-HELLO        – sent by both sides at the start of a session; carries the
-               sender's RSA public key.
-SESSION_KEY  – sent by the client after receiving the server's HELLO;
-               carries the AES session key encrypted with the server's
-               RSA public key.
-MSG          – an encrypted, signed application message.
-ERROR        – fatal error notice.
-"""
+"""Wire protocol helpers for the encrypted messaging application."""
 
 import json
 import struct
@@ -25,10 +6,9 @@ import base64
 import socket
 
 # Message type constants
-T_HELLO       = "SALAM"
-T_SESSION_KEY = "SAFRAN"
-T_MSG         = "ABEER"
-T_ERROR       = "ERROR"
+T_HELLO = "SALAM"
+T_MSG = "ABEER"
+T_ERROR = "ERROR"
 
 _HEADER_FMT  = "!I"          # 4-byte big-endian unsigned int
 _HEADER_SIZE = struct.calcsize(_HEADER_FMT)
@@ -69,35 +49,53 @@ def _recv_exactly(sock: socket.socket, n: int) -> bytes:
 # ---------------------------------------------------------------------------
 
 def send_hello(sock: socket.socket, public_key_pem: bytes) -> None:
-    """Send our RSA public key to the peer."""
+    """Send a generic public key to the peer."""
     payload = {
         "type": T_HELLO,
         "public_key": base64.b64encode(public_key_pem).decode(),
     }
     _send_raw(sock, json.dumps(payload).encode())
 
-
-def send_session_key(sock: socket.socket, encrypted_key: bytes) -> None:
-    """Send the AES session key (RSA-encrypted) to the server."""
+def send_server_params(sock: socket.socket, p: int, g: int, server_public_bytes: bytes) -> None:
+    """Send DH parameters and the server public key to the client."""
     payload = {
-        "type": T_SESSION_KEY,
-        "encrypted_key": base64.b64encode(encrypted_key).decode(),
+        "type": T_HELLO,
+        "p": p,
+        "g": g,
+        "server_public_bytes": base64.b64encode(server_public_bytes).decode(),
     }
     _send_raw(sock, json.dumps(payload).encode())
 
+def send_client_params(sock: socket.socket, client_public_bytes: bytes) -> None:
+    """Send the client DH public key to the server."""
+    payload = {
+        "type": T_HELLO,
+        "client_public_bytes": base64.b64encode(client_public_bytes).decode(),
+    }
+    _send_raw(sock, json.dumps(payload).encode())
+
+
+def recieve_dh(sock: socket.socket) -> dict:
+    """Receive a DH handshake message."""
+    raw = _recv_raw(sock)
+    msg = json.loads(raw.decode())
+
+    for field in ("server_public_bytes", "client_public_bytes"):
+        if field in msg:
+            msg[field] = base64.b64decode(msg[field])
+
+    return msg
 
 def send_message(
     sock: socket.socket,
     nonce: bytes,
     ciphertext: bytes,
-    signature: bytes,
 ) -> None:
-    """Send an encrypted, signed message."""
+    """Send an encrypted message."""
     payload = {
         "type": T_MSG,
         "nonce":      base64.b64encode(nonce).decode(),
         "ciphertext": base64.b64encode(ciphertext).decode(),
-        "signature":  base64.b64encode(signature).decode(),
     }
     _send_raw(sock, json.dumps(payload).encode())
 
@@ -116,14 +114,12 @@ def receive(sock: socket.socket) -> dict:
     """
     Receive the next message from *sock*.
 
-    Returns a plain dict with a guaranteed "type" key.  Binary fields are
-    already decoded back to *bytes*.
+    Returns a plain dict with a guaranteed "type" key.
     """
     raw = _recv_raw(sock)
     msg = json.loads(raw.decode())
 
-    # Decode base64 binary fields in-place
-    for field in ("public_key", "encrypted_key", "nonce", "ciphertext", "signature"):
+    for field in ("public_key", "nonce", "ciphertext"):
         if field in msg:
             msg[field] = base64.b64decode(msg[field])
 

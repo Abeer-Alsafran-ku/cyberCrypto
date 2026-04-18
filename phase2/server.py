@@ -18,9 +18,12 @@ import threading
 
 import crypto_utils as cu # helpful functions for encryption and decryprion algorithms.
 import protocol as proto  # wire protocol for the message over the internet.
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import dh
 
 
-def handle_client(conn: socket.socket, addr: tuple, server_private_key, server_public_key_pem: bytes) -> None:
+#def handle_client(conn: socket.socket, addr: tuple, server_private_key, server_public_key_pem: bytes) -> None:
+def handle_client(conn: socket.socket, addr: tuple) -> None:
     peer = f"{addr[0]}:{addr[1]}"
     print(f"[+] New connection from {peer}")
     
@@ -31,24 +34,36 @@ def handle_client(conn: socket.socket, addr: tuple, server_private_key, server_p
         # Handshake                                                          #
         # ------------------------------------------------------------------ #
 
+        parameters = dh.generate_parameters(generator=2, key_size=2048)
+        server_private_key = parameters.generate_private_key()
+        server_public_key = server_private_key.public_key()
+        parameters_numbers = parameters.parameter_numbers()
+        p = parameters_numbers.p
+        g = parameters_numbers.g
+        
         # Step 1 – send our public key
-        proto.send_hello(conn, server_public_key_pem)
+        server_public_bytes = server_public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+
+        proto.send_server_params(conn, p, g, server_public_bytes)
+        
 
         # Step 2 – receive client's public key
-        msg = proto.receive(conn)
+        msg = proto.recieve_dh(conn)
         if msg["type"] != proto.T_HELLO:
-            proto.send_error(conn, "Expected HELLO")
+            proto.send_error(conn, "Expected SALAM")
             return
-        client_public_key = cu.deserialize_public_key(msg["public_key"])
+        
+        loaded_client_public_key = serialization.load_pem_public_key(msg["client_public_bytes"])
+        
         print(f"[{peer}] Received client public key.")
 
-        # Step 3 – receive AES session key (encrypted with our RSA public key)
-        msg = proto.receive(conn)
-        if msg["type"] != proto.T_SESSION_KEY:
-            proto.send_error(conn, "Expected SESSION_KEY")
-            return
-        session_key = cu.rsa_decrypt(server_private_key, msg["encrypted_key"])
-        print(f"[{peer}] Session key established (AES-256-GCM). Handshake complete.")
+        server_shared_key = server_private_key.exchange(loaded_client_public_key)
+        session_key = cu.generate_dh_keypair(server_shared_key)
+
+        print(f"[{peer}] Session key established (Diffie Hellman). Handshake complete.")
 
         # ------------------------------------------------------------------ #
         # Messaging loop                                                       #
@@ -66,23 +81,14 @@ def handle_client(conn: socket.socket, addr: tuple, server_private_key, server_p
                 print(f"[{peer}] Unexpected message type: {msg['type']}")
                 continue
 
-            # Decrypt
             plaintext = cu.aes_decrypt(session_key, msg["nonce"], msg["ciphertext"])
-
-            # Verify signature (signed over the raw ciphertext bytes)
-            valid = cu.verify(client_public_key, msg["ciphertext"], msg["signature"])
-            sig_status = "VALID" if valid else "INVALID ⚠"
-
-            print(f"[{peer}] Message received | signature: {sig_status}")
+            print(f"[{peer}] Message received")
             print(f"    {plaintext.decode()}")
 
             # Echo back an encrypted, signed reply
             reply_text = f"[Server echo] {plaintext.decode()}"
             nonce, ciphertext = cu.aes_encrypt(session_key, reply_text.encode())
-            # Sign the raw ciphertext so the client can verify authenticity
-            server_priv = server_private_key          # already in scope
-            signature = cu.sign(server_priv, ciphertext)
-            proto.send_message(conn, nonce, ciphertext, signature)
+            proto.send_message(conn, nonce, ciphertext)
 
     except ConnectionError as exc:
         print(f"[{peer}] Connection closed: {exc}")
@@ -94,10 +100,10 @@ def handle_client(conn: socket.socket, addr: tuple, server_private_key, server_p
 
 
 def run_server(host: str, port: int) -> None:
-    print("Generating RSA-2048 key pair for server…")
-    server_private_key, server_public_key = cu.generate_rsa_keypair() # generating the public and private key of server
-    server_public_key_pem = cu.serialize_public_key(server_public_key) # serialize the public key
-    print("Key pair ready.\n")
+  #  print("Generating RSA-2048 key pair for server…")
+#    server_private_key, server_public_key = cu.generate_rsa_keypair() # generating the public and private key of server
+ #   server_public_key_pem = cu.serialize_public_key(server_public_key) # serialize the public key
+   # print("Key pair ready.\n")
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv: # create the socket so client can listen to the server
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) 
@@ -111,7 +117,8 @@ def run_server(host: str, port: int) -> None:
                 conn, addr = srv.accept()
                 t = threading.Thread(       # threading for handling multiple clients simoultancly.
                     target=handle_client,   # handle_client() for establishing the key (over a secure channel) and receiving messages. 
-                    args=(conn, addr, server_private_key, server_public_key_pem), # args of handle_client()
+                    #args=(conn, addr, server_private_key, server_public_key_pem), # args of handle_client()
+                    args=(conn, addr), # args of handle_client()
                     daemon=True, # spawn child
                 )
                 t.start() # start thread

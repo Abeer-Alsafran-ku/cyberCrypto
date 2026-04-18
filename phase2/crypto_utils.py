@@ -13,27 +13,40 @@ from cryptography.hazmat.primitives.asymmetric import dh, rsa, padding as asym_p
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 # ---------------------------------------------------------------------------
 # RSA key management
 # ---------------------------------------------------------------------------
 
-def generate_rsa_keypair() -> tuple[RSAPrivateKey, RSAPublicKey]:
+#def generate_rsa_keypair() -> tuple[RSAPrivateKey, RSAPublicKey]:
+def generate_dh_keypair(shared_key: bytes) -> bytes:
     """Generate a fresh RSA-2048 key pair."""
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=2048,
-    )
-    return private_key, private_key.public_key()
+    #private_key = rsa.generate_private_key(
+     #   public_exponent=65537,
+      #  key_size=2048,
+    #)
+
+    return HKDF(
+            algorithm = hashes.SHA256(),
+            length=32,
+            salt = None,
+            info = b"handshake data",
+            ).derive(shared_key)
+
+    """Diffie Hellman """
+    #parameters = dh.generate_parameters(generator = 2, key_size=2048)
+    #private_key = parameters.generate_private_key()
+
+    #return private_key, parameters.generate_private_key().public_key()
 
 
-def serialize_public_key(public_key: RSAPublicKey) -> bytes:
+#def serialize_public_key(public_key: DHPublicKey) -> bytes:
     """Serialize a public key to PEM bytes for transmission."""
-    return public_key.public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    )
+   # return public_key.public_bytes(
+  #      encoding=serialization.Encoding.PEM,
+ #       format=serialization.PublicFormat.SubjectPublicKeyInfo,
+#    )
 
 
 def deserialize_public_key(pem_bytes: bytes) -> RSAPublicKey:
