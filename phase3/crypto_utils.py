@@ -141,8 +141,8 @@ def verify(public_key:RSAPublicKey, message: bytes, signature: bytes) -> bool:
             hashes.SHA256(),
         )
         return True
-    except Exception:
-        print(f"Exception: {Exception}")
+    except Exception as exc:
+        print(f"Signature verification failed: {exc}")
         return False
 
 

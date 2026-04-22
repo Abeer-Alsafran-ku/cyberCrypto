@@ -128,7 +128,7 @@ def receive(sock: socket.socket) -> dict:
     raw = _recv_raw(sock)
     msg = json.loads(raw.decode())
 
-    for field in ("public_key", "nonce", "ciphertext"):
+    for field in ("public_key", "nonce", "ciphertext", "sig"):
         if field in msg:
             msg[field] = base64.b64decode(msg[field])
 

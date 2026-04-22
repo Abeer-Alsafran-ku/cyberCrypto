@@ -101,9 +101,9 @@ def handle_client(conn: socket.socket, addr: tuple) -> None:
                 print(f"    {plaintext.decode()}")
 
                 # Echo back an encrypted, signed reply
-                reply_text = f"[Server echo] {plaintext.decode()}"
-                nonce, ciphertext = cu.aes_encrypt(session_key, reply_text.encode())
-                proto.send_message(conn, nonce, ciphertext)
+                #reply_text = f"[Server echo] {plaintext.decode()}"
+                #nonce, ciphertext = cu.aes_encrypt(session_key, reply_text.encode())
+                #proto.send_message(conn, nonce, ciphertext)
             else:
                 print("Message is not verified : Propability of message tampring !\n")
 
