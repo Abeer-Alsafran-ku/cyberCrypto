@@ -97,7 +97,7 @@ def handle_client(conn: socket.socket, addr: tuple) -> None:
             if received_from_client :
                 # \\ Decrypt the message \\
                 plaintext = cu.aes_decrypt(session_key, msg["nonce"], msg["ciphertext"])
-                print(f"[{peer}] Message received")
+                print(f"[{peer}] Message received and Verified")
                 print(f"    {plaintext.decode()}")
 
                 # Echo back an encrypted, signed reply
