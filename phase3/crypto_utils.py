@@ -14,6 +14,8 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPubl
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+import hmac
+import hashlib
 
 
 # ---------------------------------------------------------------------------
@@ -180,3 +182,17 @@ def aes_decrypt(key: bytes, nonce: bytes, ciphertext: bytes) -> bytes:
     """
     aesgcm = AESGCM(key)
     return aesgcm.decrypt(nonce, ciphertext, None)
+
+
+# ---------------------------------------------------------------------------
+# HMAC for Message Integrity 
+# ---------------------------------------------------------------------------
+
+def generate_hmac(key: bytes, msg: bytes) -> str:
+    """Generates a HMAC signature for a message."""
+    return hmac.new(key, msg, hashlib.sha256).hexdigest()
+
+def verify_hmac(key: bytes, msg: bytes, received_signature: str) -> bool:
+    """Verifies a message's integrity against a received signature."""
+    expected_signature = generate_hmac(key, msg)
+    return hmac.compare_digest(expected_signature, received_signature)

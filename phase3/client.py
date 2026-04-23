@@ -93,7 +93,6 @@ def run_client(host: str, port: int) -> None:
         print("Session key established with Diffie-Hellman.")
         
         print("Handshake complete.\n")
-        print("Type a message and press Enter to send.  Type 'quit' to exit.\n")
 
 
         # ------------------------------------------------------------------ #
@@ -107,6 +106,9 @@ def run_client(host: str, port: int) -> None:
         # \\ send to server rsa public key for verification \\
         proto.send_client_params(sock, rsa_client_public_key_pem,rsa=True)
 
+        
+
+        print("Type a message and press Enter to send.  Type 'quit' to exit.\n")
         # -------------------------------------------------------------- #
         # Start background receiver thread                                #
         # -------------------------------------------------------------- #
@@ -139,15 +141,19 @@ def run_client(host: str, port: int) -> None:
                     continue
 
 
-                # \\ Sending the MSG : Using AES Cipher Algorithm \\
+                # \\ Encrypt the MSG : Using AES Cipher Algorithm \\
                 nonce, ciphertext = cu.aes_encrypt(session_key, line.encode())
                 
+                # \\ Create the HMAC-SHA256 for the MSG  \\
+                hmac_msg = cu.generate_hmac(session_key,line.encode())
+
+
                 # \\ Use RSA-PSS for Digital Signiture  \\
                 sig = cu.sign(rsa_client_private_key, ciphertext)
                 
                 # \\ Send the MSG with Digital Sig \\
                 # proto.send_message(sock, nonce, ciphertext)
-                proto.send_message(sock, nonce,ciphertext, sig)
+                proto.send_message(sock, nonce,ciphertext, sig, hmac_msg)
 
         except (EOFError, KeyboardInterrupt):
             print("\n[*] Exiting…")

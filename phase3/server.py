@@ -97,15 +97,27 @@ def handle_client(conn: socket.socket, addr: tuple) -> None:
             if received_from_client :
                 # \\ Decrypt the message \\
                 plaintext = cu.aes_decrypt(session_key, msg["nonce"], msg["ciphertext"])
-                print(f"[{peer}] Message received and Verified")
-                print(f"    {plaintext.decode()}")
 
+                # \\ Comment the below for msg Auth | Uncomment for msg tampering \\
+                # tampered_plaintext = plaintext + b'!' # Simulate message tampering by adding an exclamation mark
+                # plaintext = tampered_plaintext
+                # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+                # \\ Check the message integrity  \\
+                hmac_auth = cu.verify_hmac(session_key, plaintext, msg["hmac_msg"])
+
+                if hmac_auth: 
+                    print(f"[{peer}] Message received and Verified")
+                    print(f"    {plaintext.decode()}")
+
+                else:
+                    print("Message is not verified : Propability of message tampring !\n")
                 # Echo back an encrypted, signed reply
                 #reply_text = f"[Server echo] {plaintext.decode()}"
                 #nonce, ciphertext = cu.aes_encrypt(session_key, reply_text.encode())
                 #proto.send_message(conn, nonce, ciphertext)
             else:
-                print("Message is not verified : Propability of message tampring !\n")
+                print("Sender is not verified : Propability of Identity Theft !\n")
 
     except ConnectionError as exc:
         print(f"[{peer}] Connection closed: {exc}")

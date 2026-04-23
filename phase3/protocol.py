@@ -98,13 +98,15 @@ def send_message(
     nonce: bytes,
     ciphertext: bytes,
     sig: bytes,
+    hmac_msg: hex
 ) -> None:
     """Send an encrypted message."""
     payload = {
         "type": T_MSG,
         "nonce":      base64.b64encode(nonce).decode(),
         "ciphertext": base64.b64encode(ciphertext).decode(),
-        "sig" : base64.b64encode(sig).decode()
+        "sig" : base64.b64encode(sig).decode(),
+        "hmac_msg": hmac_msg,
     }
     _send_raw(sock, json.dumps(payload).encode())
 
