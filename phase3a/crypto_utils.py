@@ -6,7 +6,6 @@ Provides:
   - RSA-OAEP encryption/decryption (for key exchange)
   - RSA-PSS digital signatures and verification
   - AES-256-GCM authenticated encryption/decryption
-  - Random prime number generation for session keys
 """
 
 import os
@@ -17,8 +16,6 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 import hmac
 import hashlib
-from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
-import random
 
 
 # ---------------------------------------------------------------------------
@@ -46,57 +43,6 @@ def deserialize_public_key(pem_bytes: bytes) -> RSAPublicKey:
     """Deserialize a PEM-encoded public key received from a peer."""
     return serialization.load_pem_public_key(pem_bytes)
 
-
-# ---------------------------------------------------------------------------
-# Prime number generation for alternative key exchange
-# ---------------------------------------------------------------------------
-
-def is_prime(n: int, k: int = 40) -> bool:
-    """
-    Miller-Rabin primality test.
-    Returns True if n is probably prime (with error probability < 2^-k).
-    """
-    if n < 2:
-        return False
-    if n == 2 or n == 3:
-        return True
-    if n % 2 == 0:
-        return False
-
-    # Write n-1 as 2^r * d
-    r, d = 0, n - 1
-    while d % 2 == 0:
-        r += 1
-        d //= 2
-
-    # Witness loop
-    for _ in range(k):
-        a = random.randrange(2, n - 1)
-        x = pow(a, d, n)
-        if x == 1 or x == n - 1:
-            continue
-        for _ in range(r - 1):
-            x = pow(x, 2, n)
-            if x == n - 1:
-                break
-        else:
-            return False
-    return True
-
-
-def generate_random_prime(bit_length: int = 256) -> int:
-    """
-    Generate a random prime number of specified bit length.
-    Default is 256 bits (32 bytes) to match AES-256 key size.
-    """
-    while True:
-        # Generate a random odd number with the specified bit length
-        candidate = random.getrandbits(bit_length)
-        candidate |= (1 << bit_length - 1)  # Ensure top bit is set
-        candidate |= 1  # Ensure it's odd
-
-        if is_prime(candidate):
-            return candidate
 
 
 # ---------------------------------------------------------------------------

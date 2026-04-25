@@ -62,69 +62,35 @@ def run_client(host: str, port: int) -> None:
         print("Connected.\n")
 
         # -------------------------------------------------------------- #
-        # Receive key exchange method from server                         #
+        # Handshake By DH                                                #
         # -------------------------------------------------------------- #
-        msg = proto.receive(sock)
-        if msg["type"] != proto.T_KEY_METHOD:
-            print(f"[!] Expected KEY_METHOD from server, got {msg['type']}")
-            return
         
-        use_dh = msg.get("method") == "DH"
-        print(f"Server selected: {msg.get('method')} key exchange\n")
+        # \\ Step 1 – receive server's public key \\
+        msg = proto.recieve_dh(sock)
+        if msg["type"] != proto.T_HELLO:
+            print(f"[!] Expected SALAM from server, got {msg['type']}")
+            return
 
-        if use_dh:
-            # ------------------------------------------------------------------ #
-            # Handshake By DH                                                    #
-            # ------------------------------------------------------------------ #
-            
-            # \\ Step 1 – receive server's public key \\
-            msg = proto.recieve_dh(sock)
-            if msg["type"] != proto.T_HELLO:
-                print(f"[!] Expected SALAM from server, got {msg['type']}")
-                return
+        loaded_server_public_key = serialization.load_pem_public_key(msg["server_public_bytes"])
+        print("Received server public key.")
 
-            loaded_server_public_key = serialization.load_pem_public_key(msg["server_public_bytes"])
-            print("Received server public key.")
+        pn = dh.DHParameterNumbers(msg["p"], msg["g"])
+        client_parameters = pn.parameters()
+        print("Generating DH key pair for client…")
+        client_private_key = client_parameters.generate_private_key()
+        client_public_key = client_private_key.public_key()
+        print("Key pair ready.\n")
 
-            pn = dh.DHParameterNumbers(msg["p"], msg["g"])
-            client_parameters = pn.parameters()
-            print("Generating DH key pair for client…")
-            client_private_key = client_parameters.generate_private_key()
-            client_public_key = client_private_key.public_key()
-            print("Key pair ready.\n")
+        client_public_bytes = client_public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
 
-            client_public_bytes = client_public_key.public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo,
-            )
+        client_shared_key = client_private_key.exchange(loaded_server_public_key)
+        session_key = cu.generate_dh_keypair(client_shared_key)
 
-            client_shared_key = client_private_key.exchange(loaded_server_public_key)
-            session_key = cu.generate_dh_keypair(client_shared_key)
-
-            proto.send_client_params(sock, client_public_bytes, rsa= False)
-            print("Session key established with Diffie-Hellman.")
-
-        else:
-            # ------------------------------------------------------------------ #
-            # Handshake using Random Prime                                       #
-            # ------------------------------------------------------------------ #
-            print("Server is using Random Prime key exchange")
-            print("Waiting to receive session key from server…")
-            
-            # Receive the random prime from server
-            msg = proto.receive(sock)
-            if msg["type"] != proto.T_RANDOM_PRIME:
-                print(f"[!] Expected RANDOM_PRIME from server, got {msg['type']}")
-                return
-            
-            random_prime = msg.get("prime")
-            if random_prime is None:
-                print("[!] Server did not send a valid prime number")
-                return
-                
-            print(f"Received random prime from server.")
-            session_key = random_prime.to_bytes(32, byteorder='big')
-            print("Session key established with Random Prime.")
+        proto.send_client_params(sock, client_public_bytes, rsa= False)
+        print("Session key established with Diffie-Hellman.")
         
         print("Handshake complete.\n")
 

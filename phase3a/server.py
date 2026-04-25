@@ -15,7 +15,6 @@ Run:
 import argparse
 import socket
 import threading
-import sys
 
 import crypto_utils as cu # helpful functions for encryption and decryprion algorithms.
 import protocol as proto  # wire protocol for the message over the internet.
@@ -23,7 +22,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import dh
 
 
-def handle_client(conn: socket.socket, addr: tuple, use_dh: bool) -> None:
+def handle_client(conn: socket.socket, addr: tuple) -> None:
     peer = f"{addr[0]}:{addr[1]}"
     print(f"[+] New connection from {peer}")
     
@@ -31,64 +30,39 @@ def handle_client(conn: socket.socket, addr: tuple, use_dh: bool) -> None:
 
     try:
         # ------------------------------------------------------------------ #
-        # Inform client of key exchange method                              #
+        # Handshake by Deffie Hellman                                        #
         # ------------------------------------------------------------------ #
-        method = "DH" if use_dh else "RANDOM_PRIME"
-        proto.send_key_method(conn, method)
-        print(f"[{peer}] Using {method} key exchange")
 
-        if use_dh:
-            # ------------------------------------------------------------------ #
-            # Handshake by Diffie Hellman                                        #
-            # ------------------------------------------------------------------ #
+        parameters = dh.generate_parameters(generator=2, key_size=2048)
+        server_private_key = parameters.generate_private_key()
+        server_public_key = server_private_key.public_key()
+        parameters_numbers = parameters.parameter_numbers()
+        p = parameters_numbers.p
+        g = parameters_numbers.g
+        
+        # \\ Step 1 – send our public key \\
+        server_public_bytes = server_public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
 
-            parameters = dh.generate_parameters(generator=2, key_size=2048)
-            server_private_key = parameters.generate_private_key()
-            server_public_key = server_private_key.public_key()
-            parameters_numbers = parameters.parameter_numbers()
-            p = parameters_numbers.p
-            g = parameters_numbers.g
-            
-            # \\ Step 1 – send our public key \\
-            server_public_bytes = server_public_key.public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo,
-            )
+        proto.send_server_params(conn, p, g, server_public_bytes)
+        
 
-            proto.send_server_params(conn, p, g, server_public_bytes)
-            
+        # \\ Step 2 – receive client's public key \\
+        msg = proto.recieve_dh(conn)
+        if msg["type"] != proto.T_HELLO:
+            proto.send_error(conn, "Expected SALAM")
+            return
+        
+        loaded_client_public_key = serialization.load_pem_public_key(msg["client_public_bytes"])
+        
+        print(f"[{peer}] Received client public key.")
 
-            # \\ Step 2 – receive client's public key \\
-            msg = proto.recieve_dh(conn)
-            if msg["type"] != proto.T_HELLO:
-                proto.send_error(conn, "Expected SALAM")
-                return
-            
-            loaded_client_public_key = serialization.load_pem_public_key(msg["client_public_bytes"])
-            
-            print(f"[{peer}] Received client public key.")
+        server_shared_key = server_private_key.exchange(loaded_client_public_key)
+        session_key = cu.generate_dh_keypair(server_shared_key)
 
-            server_shared_key = server_private_key.exchange(loaded_client_public_key)
-            session_key = cu.generate_dh_keypair(server_shared_key)
-
-            print(f"[{peer}] Session key established (Diffie Hellman). Handshake complete.")
-
-        else:
-            # ------------------------------------------------------------------ #
-            # Handshake using Random Prime                                       #
-            # ------------------------------------------------------------------ #
-            # Generate a random prime and send it to client
-            print(f"[{peer}] Generating random prime for session key...")
-            random_prime = cu.generate_random_prime(256)
-            
-            # Send the prime to client
-            proto.send_random_prime_value(conn, random_prime)
-            print(f"[{peer}] Sent random prime to client.")
-            
-            # Convert prime to bytes for session key
-            session_key = random_prime.to_bytes(32, byteorder='big')
-            
-            print(f"[{peer}] Session key established (Random Prime). Handshake complete.")
+        print(f"[{peer}] Session key established (Diffie Hellman). Handshake complete.")
 
         # ------------------------------------------------------------------ #
         # Receive Client RSA pub for verification                            #
@@ -154,7 +128,7 @@ def handle_client(conn: socket.socket, addr: tuple, use_dh: bool) -> None:
         print(f"[-] Disconnected: {peer}")
 
 
-def run_server(host: str, port: int, use_dh: bool) -> None:
+def run_server(host: str, port: int) -> None:
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:  
         #// create the socket so client can listen to the server //
@@ -169,7 +143,8 @@ def run_server(host: str, port: int, use_dh: bool) -> None:
                 conn, addr = srv.accept()
                 t = threading.Thread(       # threading for handling multiple clients simoultancly.
                     target=handle_client,   # handle_client() for establishing the key (over a secure channel) and receiving messages. 
-                    args=(conn, addr, use_dh), # args of handle_client()
+                    #args=(conn, addr, server_private_key, server_public_key_pem), # args of handle_client()
+                    args=(conn, addr), # args of handle_client()
                     daemon=True, # spawn child
                 )
                 t.start() # start thread
@@ -181,41 +156,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Encrypted messaging server")
     parser.add_argument("--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=9000, help="Port (default: 9000)")
-    parser.add_argument("--dh", action="store_true", default=None, help="Use Diffie-Hellman key exchange")
-    parser.add_argument("--random-prime", action="store_true", help="Use random prime for session key")
     args = parser.parse_args()
-
-    # Determine which key exchange method to use
-    use_dh = True  # Default to DH
-    
-    # If user specified a preference via command line, use it
-    if args.random_prime:
-        use_dh = False
-    elif args.dh:
-        use_dh = True
-    else:
-        # Prompt user interactively if no preference was given
-        print("\n" + "="*60)
-        print("SELECT KEY EXCHANGE METHOD")
-        print("="*60)
-        print("1. Diffie-Hellman (default, recommended)")
-        print("2. Random Prime Number")
-        print("="*60)
-        
-        while True:
-            choice = input("Enter your choice (1 or 2) [default: 1]: ").strip()
-            if choice == "" or choice == "1":
-                use_dh = True
-                print("→ Using Diffie-Hellman key exchange\n")
-                break
-            elif choice == "2":
-                use_dh = False
-                print("→ Using Random Prime key exchange\n")
-                break
-            else:
-                print("Invalid choice. Please enter 1 or 2.")
-
-    run_server(args.host, args.port, use_dh)
+    run_server(args.host, args.port)
 
 
 if __name__ == "__main__":

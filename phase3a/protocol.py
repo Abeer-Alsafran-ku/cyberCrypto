@@ -9,8 +9,6 @@ import socket
 T_HELLO = "SALAM"
 T_MSG = "ABEER"
 T_ERROR = "ERROR"
-T_KEY_METHOD = "KEY_METHOD"  # Indicates which key exchange method to use
-T_RANDOM_PRIME = "RANDOM_PRIME"  # For random prime key exchange
 
 _HEADER_FMT  = "!I"          # 4-byte big-endian unsigned int
 _HEADER_SIZE = struct.calcsize(_HEADER_FMT)
@@ -49,32 +47,6 @@ def _recv_exactly(sock: socket.socket, n: int) -> bytes:
 # ---------------------------------------------------------------------------
 # High-level send helpers
 # ---------------------------------------------------------------------------
-
-def send_key_method(sock: socket.socket, method: str) -> None:
-    """Send the key exchange method to the peer (DH or RANDOM_PRIME)."""
-    payload = {
-        "type": T_KEY_METHOD,
-        "method": method,
-    }
-    _send_raw(sock, json.dumps(payload).encode())
-
-
-def send_random_prime_value(sock: socket.socket, prime: int) -> None:
-    """Send a random prime number (in plain format) to the client."""
-    payload = {
-        "type": T_RANDOM_PRIME,
-        "prime": prime,
-    }
-    _send_raw(sock, json.dumps(payload).encode())
-
-
-def send_random_prime(sock: socket.socket, encrypted_prime: bytes) -> None:
-    """Send a random prime (encrypted) to establish session key."""
-    payload = {
-        "type": T_RANDOM_PRIME,
-        "encrypted_prime": base64.b64encode(encrypted_prime).decode(),
-    }
-    _send_raw(sock, json.dumps(payload).encode())
 
 def send_hello(sock: socket.socket, public_key_pem: bytes) -> None:
     """Send a generic public key to the peer."""
@@ -158,7 +130,7 @@ def receive(sock: socket.socket) -> dict:
     raw = _recv_raw(sock)
     msg = json.loads(raw.decode())
 
-    for field in ("public_key", "nonce", "ciphertext", "sig", "encrypted_prime"):
+    for field in ("public_key", "nonce", "ciphertext", "sig"):
         if field in msg:
             msg[field] = base64.b64decode(msg[field])
 
