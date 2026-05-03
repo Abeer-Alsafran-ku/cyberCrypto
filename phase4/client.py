@@ -1,17 +1,3 @@
-"""
-Encrypted messaging client.
-
-Handshake
----------
-1. Receive server HELLO (server RSA public key).
-2. Send own HELLO (client RSA public key).
-3. Generate AES-256 session key, encrypt with server's public key, send SESSION_KEY.
-4. Exchange encrypted, signed messages interactively.
-
-Run:
-    python client.py [--host HOST] [--port PORT]
-"""
-
 import argparse
 import socket
 import threading

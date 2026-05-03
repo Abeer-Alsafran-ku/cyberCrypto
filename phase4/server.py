@@ -1,17 +1,3 @@
-"""
-Encrypted messaging server.
-
-Handshake (per client connection)
-----------------------------------
-1. Server  → HELLO  (server RSA public key)
-2. Client  → HELLO  (client RSA public key)
-3. Client  → SESSION_KEY  (AES-256 key encrypted with server's RSA public key)
-4. Both sides are now ready to exchange AES-256-GCM + RSA-PSS signed messages.
-
-Run:
-    python server.py [--host HOST] [--port PORT]
-"""
-
 import argparse
 import socket
 import threading
