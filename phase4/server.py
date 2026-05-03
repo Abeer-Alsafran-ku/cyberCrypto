@@ -112,6 +112,7 @@ def handle_client(conn: socket.socket, addr: tuple, test_case_id: int, prime_bit
             
             session_key = cu.derive_session_key_from_prime(random_prime)
             
+            handshake_elapsed = time.perf_counter() - handshake_start
             print(f"[{peer}] Session key established (Random Prime). Handshake complete.")
 
             if scenario["attack"] == "brute_force":
@@ -125,7 +126,6 @@ def handle_client(conn: socket.socket, addr: tuple, test_case_id: int, prime_bit
                     f"{attack_result['estimated_full_seconds']:.3e} seconds."
                 )
 
-        handshake_elapsed = time.perf_counter() - handshake_start
         print(f"[{peer}] Handshake time: {handshake_elapsed:.6f} seconds")
 
         # ------------------------------------------------------------------ #

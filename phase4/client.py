@@ -160,8 +160,8 @@ def run_client(host: str, port: int) -> None:
             session_key = cu.derive_session_key_from_prime(random_prime)
             print("Session key established with Random Prime.")
         
-        print("Handshake complete.\n")
         handshake_elapsed = time.perf_counter() - handshake_start
+        print("Handshake complete.\n")
         print(f"Handshake time: {handshake_elapsed:.6f} seconds\n")
 
 
