@@ -11,6 +11,13 @@ from cryptography.hazmat.primitives.asymmetric import dh
 
 
 TEST_CASES = {
+    0: {
+        "name": "CyberCrypto Scheme",
+        "use_dh": True,
+        "use_signature": True,
+        "use_hmac": True,
+        "attack": "none",
+    },
     1: {
         "name": "No Diffie-Hellman key exchange (Random Prime) | Attack: Brute force",
         "use_dh": False,
@@ -51,17 +58,20 @@ def handle_client(conn: socket.socket, addr: tuple, test_case_id: int, prime_bit
     # \\ once the client has been connected over the socket the process begins. \\
 
     try:
-        handshake_start = time.perf_counter()
+         
         # ------------------------------------------------------------------ #
         # Inform client of key exchange method                              #
         # ------------------------------------------------------------------ #
         method = "DH" if use_dh else "RANDOM_PRIME"
         proto.send_key_method(conn, method)
         proto.send_test_case(conn, test_case_id, scenario["name"])
-        print(f"[{peer}] Using {method} key exchange")
-        print(f"[{peer}] Test case {test_case_id}: {scenario['name']}")
 
         if use_dh:
+            # ------------------------------------------------------------------ #
+            # Starting time for claculating key exchange                         #
+            # ------------------------------------------------------------------ #
+            handshake_start = time.perf_counter()
+            
             # ------------------------------------------------------------------ #
             # Handshake by Diffie Hellman                                        #
             # ------------------------------------------------------------------ #
@@ -89,31 +99,45 @@ def handle_client(conn: socket.socket, addr: tuple, test_case_id: int, prime_bit
                 return
             
             loaded_client_public_key = serialization.load_pem_public_key(msg["client_public_bytes"])
-            
-            print(f"[{peer}] Received client public key.")
-
             server_shared_key = server_private_key.exchange(loaded_client_public_key)
             session_key = cu.generate_dh_keypair(server_shared_key)
-
+            
+            # ------------------------------------------------------------------ #
+            # Handshake elapsed time 
+            handshake_elapsed = time.perf_counter() - handshake_start
+            
+            print(f"[{peer}] Using {method} key exchange")
+            print(f"[{peer}] Test case {test_case_id}: {scenario['name']}")
+            print(f"[{peer}] Received client public key.")
             print(f"[{peer}] Session key established (Diffie Hellman). Handshake complete.")
 
         else:
             # ------------------------------------------------------------------ #
+            # Starting time for claculating key exchange                         #
+            # ------------------------------------------------------------------ #
+            handshake_start = time.perf_counter()
+            
+            # ------------------------------------------------------------------ #
             # Handshake using Random Prime                                       #
             # ------------------------------------------------------------------ #
             # Generate a random prime and send it to client
-            print(f"[{peer}] Generating random prime for session key...")
             random_prime = cu.generate_random_prime(prime_bits)
             prime_bytes = cu.int_to_bytes(random_prime)
             
             # Send the prime to client
             proto.send_random_prime_value(conn, prime_bytes, random_prime.bit_length())
-            print(f"[{peer}] Sent random prime to client ({random_prime.bit_length()} bits).")
             
             session_key = cu.derive_session_key_from_prime(random_prime)
             
+            # ------------------------------------------------------------------ #
+            # Handshake elapsed time 
             handshake_elapsed = time.perf_counter() - handshake_start
+            
+            print(f"[{peer}] Generating random prime for session key...")            
+            print(f"[{peer}] Sent random prime to client ({random_prime.bit_length()} bits).")
             print(f"[{peer}] Session key established (Random Prime). Handshake complete.")
+            
+            print(f"[{peer}] Handshake time: {handshake_elapsed:.6f} seconds")
 
             if scenario["attack"] == "brute_force":
                 attack_result = cu.brute_force_demo(session_key)
@@ -126,7 +150,6 @@ def handle_client(conn: socket.socket, addr: tuple, test_case_id: int, prime_bit
                     f"{attack_result['estimated_full_seconds']:.3e} seconds."
                 )
 
-        print(f"[{peer}] Handshake time: {handshake_elapsed:.6f} seconds")
 
         # ------------------------------------------------------------------ #
         # Receive Client RSA pub for verification                            #
@@ -164,8 +187,9 @@ def handle_client(conn: socket.socket, addr: tuple, test_case_id: int, prime_bit
                     continue
                 received_from_client = cu.verify(rsa_client_public_key, msg["ciphertext"], signature)
                 if not received_from_client:
-                    print("Sender is not verified : Probability of Identity Theft / MITM!\n")
                     print(f"[{peer}] Verification time: {time.perf_counter() - message_start:.6f} seconds")
+                    print("Sender is not verified : Probability of Identity Theft / MITM!\n")
+                    
                     continue
 
             plaintext = cu.aes_decrypt(session_key, msg["nonce"], msg["ciphertext"])
@@ -177,13 +201,13 @@ def handle_client(conn: socket.socket, addr: tuple, test_case_id: int, prime_bit
                     continue
                 hmac_auth = cu.verify_hmac(session_key, plaintext, hmac_msg)
                 if not hmac_auth:
-                    print("Message is not verified : Probability of message tampering!\n")
                     print(f"[{peer}] Verification time: {time.perf_counter() - message_start:.6f} seconds")
+                    print("Message is not verified : Probability of message tampering!\n")
                     continue
-
+                
+            print(f"[{peer}] Verification time: {time.perf_counter() - message_start:.6f} seconds")
             print(f"[{peer}] Message received and verified")
             print(f"    {plaintext.decode()}")
-            print(f"[{peer}] Verification time: {time.perf_counter() - message_start:.6f} seconds")
 
     except ConnectionError as exc:
         print(f"[{peer}] Connection closed: {exc}")
@@ -236,14 +260,14 @@ def main() -> None:
         print("="*60)
         
         while True:
-            choice = input("Enter test case number [default: 1]: ").strip()
+            choice = input("Enter test case number [default: 0]: ").strip()
             if choice == "":
-                test_case_id = 1
+                test_case_id = 0
                 break
             if choice.isdigit() and int(choice) in TEST_CASES:
                 test_case_id = int(choice)
                 break
-            print("Invalid choice. Please enter 1, 2, 3, or 4.")
+            print("Invalid choice. Please enter 0, 1, 2, 3, or 4.")
 
     selected = TEST_CASES[test_case_id]
     print(f"→ Using test case {test_case_id}: {selected['name']}\n")
