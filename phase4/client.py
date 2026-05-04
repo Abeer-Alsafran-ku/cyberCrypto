@@ -10,6 +10,13 @@ import protocol as proto
 
 
 TEST_CASES = {
+    0: {
+        "name": "CyberCrypto Scheme",
+        "use_dh": True,
+        "use_signature": True,
+        "use_hmac": True,
+        "attack": "none",
+    },
     1: {
         "name": "No Diffie-Hellman key exchange (Random Prime) | Attack: Brute force",
         "use_dh": False,
@@ -79,7 +86,7 @@ def run_client(host: str, port: int) -> None:
         print(f"Connecting to {host}:{port}…")
         sock.connect((host, port)) # connect to the socket
         print("Connected.\n")
-        handshake_start = time.perf_counter()
+           
 
         # -------------------------------------------------------------- #
         # Receive key exchange method from server                         #
@@ -105,6 +112,11 @@ def run_client(host: str, port: int) -> None:
         print(f"Test case {case_id}: {scenario['name']}\n")
 
         if use_dh:
+            
+            # ------------------------------------------------------------------ #
+            # Handshake elapsed time 
+            handshake_start = time.perf_counter()
+
             # ------------------------------------------------------------------ #
             # Handshake By DH                                                    #
             # ------------------------------------------------------------------ #
@@ -116,14 +128,11 @@ def run_client(host: str, port: int) -> None:
                 return
 
             loaded_server_public_key = serialization.load_pem_public_key(msg["server_public_bytes"])
-            print("Received server public key.")
 
             pn = dh.DHParameterNumbers(msg["p"], msg["g"])
             client_parameters = pn.parameters()
-            print("Generating DH key pair for client…")
             client_private_key = client_parameters.generate_private_key()
             client_public_key = client_private_key.public_key()
-            print("Key pair ready.\n")
 
             client_public_bytes = client_public_key.public_bytes(
                 encoding=serialization.Encoding.PEM,
@@ -134,6 +143,12 @@ def run_client(host: str, port: int) -> None:
             session_key = cu.generate_dh_keypair(client_shared_key)
 
             proto.send_client_params(sock, client_public_bytes, rsa= False)
+            
+            handshake_elapsed = time.perf_counter() - handshake_start
+            
+            print("Received server public key.")
+            print("Generating DH key pair for client…")
+            print("Key pair ready.\n")
             print("Session key established with Diffie-Hellman.")
 
         else:
@@ -143,6 +158,10 @@ def run_client(host: str, port: int) -> None:
             print("Server is using Random Prime key exchange")
             print("Waiting to receive session key from server…")
             
+            # ------------------------------------------------------------------ #
+            # Handshake elapsed time 
+            handshake_start = time.perf_counter()
+
             # Receive the random prime from server
             msg = proto.receive(sock)
             if msg["type"] != proto.T_RANDOM_PRIME:
@@ -156,11 +175,13 @@ def run_client(host: str, port: int) -> None:
                 
             prime_bits = msg.get("bit_length", len(random_prime_bytes) * 8)
             random_prime = int.from_bytes(random_prime_bytes, byteorder="big")
-            print(f"Received random prime from server ({prime_bits} bits).")
             session_key = cu.derive_session_key_from_prime(random_prime)
+            
+            handshake_elapsed = time.perf_counter() - handshake_start
+            print(f"Received random prime from server ({prime_bits} bits).")
             print("Session key established with Random Prime.")
+            
         
-        handshake_elapsed = time.perf_counter() - handshake_start
         print("Handshake complete.\n")
         print(f"Handshake time: {handshake_elapsed:.6f} seconds\n")
 
